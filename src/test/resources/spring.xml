@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+                           http://www.springframework.org/schema/beans/spring-beans-4.0.xsd">
+
+    <bean id="rpcConfigBean" class="shier.rpc.spring.RpcConfigBean" init-method="init">
+        <property name="zookeeperAddress" value="localhost:2181"/>
+    </bean>
+    <!-- 服务提供消费者-->
+    <bean id="testServiceImpl" class="test.service.impl.TestServiceImpl"></bean>
+    <bean class="shier.rpc.spring.RpcProviderBean" init-method="init" destroy-method="destroy">
+        <property name="rpcConfigBean" ref="rpcConfigBean"></property>
+        <property name="version" value="0.0.1"></property>
+        <property name="port" value="8092"></property>
+        <property name="serviceList">
+            <list>
+                <ref bean="testServiceImpl"></ref>
+            </list>
+        </property>
+    </bean>
+    <!-- 服务消费者-->
+    <bean id="testService" class="shier.rpc.spring.RpcConsumerFactoryBean" init-method="init">
+        <property name="rpcConfigBean" ref="rpcConfigBean"></property>
+        <property name="interfaceName" value="test.service.TestService"></property>
+        <property name="version" value="0.0.1"></property>
+    </bean>
+
+
+</beans>
