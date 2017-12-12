@@ -20,6 +20,8 @@ public class RpcConsumerFactoryBean implements FactoryBean {
 
     private Object bean;
 
+    private Long timeout = 5000L;
+
     @Autowired
     private RpcConfigBean rpcConfigBean;
 
@@ -35,7 +37,7 @@ public class RpcConsumerFactoryBean implements FactoryBean {
         this.objectType = Class.forName(interfaceName);
         Enhancer enhancer = new Enhancer();
         enhancer.setSuperclass(objectType);
-        enhancer.setCallback(new RpcConsumerMethodInterceptor(NameUtils.buildServiceName(interfaceName, version), rpcConfigBean));
+        enhancer.setCallback(new RpcConsumerMethodInterceptor(NameUtils.buildServiceName(interfaceName, version), rpcConfigBean, timeout));
         this.bean = enhancer.create();
     }
 
@@ -66,5 +68,9 @@ public class RpcConsumerFactoryBean implements FactoryBean {
 
     public void setRpcConfigBean(RpcConfigBean rpcConfigBean) {
         this.rpcConfigBean = rpcConfigBean;
+    }
+
+    public void setTimeout(Long timeout) {
+        this.timeout = timeout;
     }
 }

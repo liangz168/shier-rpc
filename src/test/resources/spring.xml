@@ -7,7 +7,7 @@
     <bean id="rpcConfigBean" class="shier.rpc.spring.RpcConfigBean" init-method="init">
         <property name="zookeeperAddress" value="localhost:2181"/>
     </bean>
-    <!-- 服务提供消费者-->
+    <!-- 服务提供者-->
     <bean id="testServiceImpl" class="test.service.impl.TestServiceImpl"></bean>
     <bean class="shier.rpc.spring.RpcProviderBean" init-method="init" destroy-method="destroy">
         <property name="rpcConfigBean" ref="rpcConfigBean"></property>

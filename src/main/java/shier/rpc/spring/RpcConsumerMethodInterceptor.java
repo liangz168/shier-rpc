@@ -20,13 +20,16 @@ public class RpcConsumerMethodInterceptor implements MethodInterceptor {
 
     private String serviceName;
 
+    private Long timeout;
+
     private RpcConfigBean rpcConfigBean;
 
     private List<RpcNettyClient> rpcNettyClientList = new ArrayList<>();
 
-    public RpcConsumerMethodInterceptor(String serviceName, RpcConfigBean rpcConfigBean) {
+    public RpcConsumerMethodInterceptor(String serviceName, RpcConfigBean rpcConfigBean, Long timeout) {
         this.serviceName = serviceName;
         this.rpcConfigBean = rpcConfigBean;
+        this.timeout = timeout;
         rpcConfigBean.registerConsumer(serviceName, this);
     }
 
@@ -45,7 +48,7 @@ public class RpcConsumerMethodInterceptor implements MethodInterceptor {
         List<RpcNettyClient> list = rpcNettyClientList;
         int size = list.size();
         int index = (int) (Math.random() * size); // 随机负载
-        return list.get(index).sendRpcRequest(rpcRequestDTO);
+        return list.get(index).sendRpcRequest(rpcRequestDTO, timeout);
     }
 
     public String getServiceName() {

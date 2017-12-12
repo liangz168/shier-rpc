@@ -1,6 +1,6 @@
 package test;
 
-import junit.framework.Assert;
+import org.junit.Assert;
 import org.junit.Test;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 import test.dto.TestDTO;

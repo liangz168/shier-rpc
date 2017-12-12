@@ -19,16 +19,25 @@ public class RpcCallback {
     private Lock lock = new ReentrantLock();
     private Condition finish = lock.newCondition();
     private String requestId;
+    private Long timeout;
 
     private Object object;
 
     public RpcCallback() {
     }
 
-    public Object waitCallback() throws InterruptedException {
+    public RpcCallback(String requestId, Long timeout) {
+        this.requestId = requestId;
+        this.timeout = timeout;
+    }
+
+    public Object waitCallback() throws Exception {
         try {
             lock.lock();
-            finish.await(5, TimeUnit.SECONDS);
+            Boolean timeoutFlg = finish.await(timeout, TimeUnit.MILLISECONDS);
+            if (!timeoutFlg) {
+                throw new Exception("await timeout " + timeout);
+            }
             return this.object;
         } finally {
             lock.unlock();

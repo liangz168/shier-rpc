@@ -1,5 +1,6 @@
 package shier.rpc.netty;
 
+import com.alibaba.fastjson.JSON;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -34,7 +35,7 @@ public class RpcNettyClient {
         this.serviceAddress = serviceAddress;
     }
 
-    public Object sendRpcRequest(RpcRequestDTO rpcRequestDTO) throws Exception {
+    public Object sendRpcRequest(RpcRequestDTO rpcRequestDTO, Long timeout) throws Exception {
         if (!channelFuture.isSuccess()) {
             throw new NullPointerException(serviceAddress + " is cann't connect");
         }
@@ -42,8 +43,7 @@ public class RpcNettyClient {
         if (rpcClientHandler == null) {
             throw new NullPointerException(serviceAddress + " is cann't connect");
         }
-        RpcCallback callback = rpcClientHandler.sendRpcRequest(rpcRequestDTO);
-        return callback.waitCallback();
+        return rpcClientHandler.sendRpcRequest(rpcRequestDTO, timeout);
     }
 
     public void init() {
@@ -127,15 +127,20 @@ public class RpcNettyClient {
             ctx.close();
         }
 
-        public RpcCallback sendRpcRequest(RpcRequestDTO rpcRequestDTO) throws ConnectException {
+        private Object sendRpcRequest(RpcRequestDTO rpcRequestDTO, Long timeout) throws Exception {
             if (!this.channel.isActive()) {
                 throw new ConnectException(serviceAddress + " is unable to connect");
             }
-            RpcCallback rpcCallback = new RpcCallback();
-            rpcCallback.setRequestId(rpcRequestDTO.getRequestId());
-            callbackMap.put(rpcRequestDTO.getRequestId(), rpcCallback);
-            this.channel.writeAndFlush(rpcRequestDTO);
-            return rpcCallback;
+            try {
+                RpcCallback rpcCallback = new RpcCallback(rpcRequestDTO.getRequestId(), timeout);
+                callbackMap.put(rpcRequestDTO.getRequestId(), rpcCallback);
+                this.channel.writeAndFlush(rpcRequestDTO);
+                return rpcCallback.waitCallback();
+            } catch (Exception e) {
+                callbackMap.remove(rpcRequestDTO.getRequestId());
+                log.error("rpcRequest:{} 调用失败 {}", JSON.toJSONString(rpcRequestDTO), e.getMessage());
+                throw e;
+            }
         }
 
     }
@@ -150,6 +155,7 @@ public class RpcNettyClient {
         public void operationComplete(ChannelFuture f) throws Exception {
             ChannelFutureListener _this = this;
             if (f.isSuccess()) {
+                log.info("netty {} connected!", serviceAddress);
             } else {
                 //  1秒后重新连接
                 f.channel().eventLoop().schedule(() -> {
