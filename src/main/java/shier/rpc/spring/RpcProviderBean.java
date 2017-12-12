@@ -58,6 +58,12 @@ public class RpcProviderBean implements Runnable {
 
     private ThreadPoolTaskExecutor taskExecutor;
 
+    public static final String HEALTH = "health";
+
+    public static final String OK = "ok";
+
+    private EventLoopGroup bossGroup;
+    private EventLoopGroup workerGroup;
 
     @PostConstruct
     public void init() throws Exception {
@@ -129,8 +135,16 @@ public class RpcProviderBean implements Runnable {
     public void destroy() {
         log.info("RpcProviderBean stop!");
         cancelProvider();
+
         if (taskExecutor != null) {
             taskExecutor.shutdown();
+        }
+        if (bossGroup != null) {
+            bossGroup.shutdownGracefully();
+        }
+
+        if (workerGroup != null) {
+            workerGroup.shutdownGracefully();
         }
     }
 
@@ -188,6 +202,7 @@ public class RpcProviderBean implements Runnable {
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
             log.error("ProviderServerHandler.exceptionCaught", cause);
+            ctx.close();
         }
 
         @Override
@@ -196,6 +211,12 @@ public class RpcProviderBean implements Runnable {
         }
 
         private void invoke(RpcRequestDTO rpcRequestDTO) {
+
+            if (HEALTH.equals(rpcRequestDTO.getServiceName()) && HEALTH.equals(rpcRequestDTO.getMethodName())) {
+                this.returnResponse(rpcRequestDTO.getRequestId(), OK);
+                return;
+            }
+
             taskExecutor.execute(() -> {
                 Object service = serviceMap.get(rpcRequestDTO.getServiceName());
                 if (service == null) {

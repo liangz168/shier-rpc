@@ -31,6 +31,10 @@ public class RpcNettyClient {
 
     private ChannelFuture channelFuture;
 
+    private RpcClientHandler rpcClientHandler;
+
+    private EventLoopGroup group;
+
     public RpcNettyClient(String serviceAddress) {
         this.serviceAddress = serviceAddress;
     }
@@ -39,7 +43,6 @@ public class RpcNettyClient {
         if (!channelFuture.isSuccess()) {
             throw new NullPointerException(serviceAddress + " is cann't connect");
         }
-        RpcClientHandler rpcClientHandler = channelFuture.channel().pipeline().get(RpcClientHandler.class);
         if (rpcClientHandler == null) {
             throw new NullPointerException(serviceAddress + " is cann't connect");
         }
@@ -47,7 +50,7 @@ public class RpcNettyClient {
     }
 
     public void init() {
-        EventLoopGroup group = new NioEventLoopGroup();
+        group = new NioEventLoopGroup();
         Bootstrap bootstrap = new Bootstrap();
 
         ChannelFutureListener channelFutureListener = new MyChannelFutureListener(bootstrap);
@@ -61,12 +64,12 @@ public class RpcNettyClient {
                         ch.pipeline().addLast(new LengthFieldPrepender(4));
                         ch.pipeline().addLast(new HessianObjectEncoder());
                         ch.pipeline().addLast(new HessianObjectDecoder(Integer.MAX_VALUE));
-                        ch.pipeline().addLast(new RpcClientHandler(bootstrap, channelFutureListener));
+                        rpcClientHandler = new RpcClientHandler(bootstrap, channelFutureListener);
+                        ch.pipeline().addLast(rpcClientHandler);
                     }
                 });
 
         doConnect(bootstrap, channelFutureListener);
-
     }
 
     private void doConnect(Bootstrap bootstrap, ChannelFutureListener channelFutureListener) {
@@ -74,6 +77,11 @@ public class RpcNettyClient {
         String[] addressArray = serviceAddress.split(":");
         channelFuture = bootstrap.connect(addressArray[0], Integer.parseInt(addressArray[1]));
         channelFuture.addListener(channelFutureListener);
+    }
+
+    public void disConnect() {
+        log.info("RpcNettyClient.disConnect serviceAddress={}", serviceAddress);
+        group.shutdownGracefully();
     }
 
     public String getServiceAddress() {
@@ -91,6 +99,8 @@ public class RpcNettyClient {
 
         private Channel channel;
 
+        private ChannelHandlerContext ctx;
+
         private Bootstrap bootstrap;
 
         private ChannelFutureListener channelFutureListener;
@@ -102,6 +112,7 @@ public class RpcNettyClient {
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
+            this.ctx = ctx;
             this.channel = ctx.channel();
         }
 
@@ -123,7 +134,8 @@ public class RpcNettyClient {
         }
 
         @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+            log.error("RpcClientHandler.exceptionCaught", cause);
             ctx.close();
         }
 
@@ -143,6 +155,10 @@ public class RpcNettyClient {
             }
         }
 
+        void close() {
+            this.ctx.close();
+        }
+
     }
 
     private class MyChannelFutureListener implements ChannelFutureListener {
@@ -160,6 +176,7 @@ public class RpcNettyClient {
                 //  1秒后重新连接
                 f.channel().eventLoop().schedule(() -> {
                     try {
+
                         doConnect(bootstrap, _this);
                     } catch (Exception e) {
                         e.printStackTrace();

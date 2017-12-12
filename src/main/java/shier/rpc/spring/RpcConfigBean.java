@@ -54,7 +54,7 @@ public class RpcConfigBean {
                 if (rpcNettyClient == null) {
                     rpcNettyClient = new RpcNettyClient(address);
                     rpcNettyClient.init();
-                    rpcNettyClientMap.put("address", rpcNettyClient);
+                    rpcNettyClientMap.put(address, rpcNettyClient);
                 }
                 rpcConsumerMethodInterceptor.getRpcNettyClientList().add(rpcNettyClient);
             }
@@ -122,10 +122,15 @@ public class RpcConfigBean {
                     String address = addressList.get(i);
                     if (!newAddressList.contains(address)) { //有节点下线
                         addressList.remove(i);
+                        RpcNettyClient oldClient = rpcNettyClientMap.get(address);
                         rpcNettyClientMap.remove(address);
                         List<RpcNettyClient> rpcNettyClientList = rpcConsumerMethodInterceptor.getRpcNettyClientList().stream()
                                 .filter(rpcNettyClient -> !rpcNettyClient.getServiceAddress().equals(address)).collect(Collectors.toList());
                         rpcConsumerMethodInterceptor.setRpcNettyClientList(rpcNettyClientList);
+                        if (oldClient != null) {
+                            oldClient.disConnect();
+                        }
+
                     }
                 }
 
@@ -136,7 +141,7 @@ public class RpcConfigBean {
                         if (rpcNettyClient == null) {
                             rpcNettyClient = new RpcNettyClient(address);
                             rpcNettyClient.init();
-                            rpcNettyClientMap.put("address", rpcNettyClient);
+                            rpcNettyClientMap.put(address, rpcNettyClient);
                         }
                         rpcConsumerMethodInterceptor.getRpcNettyClientList().add(rpcNettyClient);
                     }
