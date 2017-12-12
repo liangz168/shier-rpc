@@ -10,12 +10,15 @@ import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.util.internal.StringUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import shier.rpc.dto.RpcRequestDTO;
 import shier.rpc.dto.RpcResponseDTO;
 import shier.rpc.netty.HessianObjectDecoder;
 import shier.rpc.netty.HessianObjectEncoder;
 import shier.rpc.utils.NameUtils;
 
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Method;
 import java.net.InetAddress;
@@ -23,8 +26,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * @author liangliang.wei
@@ -49,11 +50,28 @@ public class RpcProviderBean implements Runnable {
 
     private Map<String, Method> serviceMethodMap = new HashMap<>();
 
-    private ExecutorService executorService = Executors.newCachedThreadPool();
+    private Integer corePoolSize = 50;
 
+    private Integer maxPoolSize = 600;
+
+    private Integer keepAliveSeconds = 600;
+
+    private ThreadPoolTaskExecutor taskExecutor;
+
+
+    @PostConstruct
     public void init() throws Exception {
         if (StringUtil.isNullOrEmpty(address)) {
             address = InetAddress.getLocalHost().getHostAddress();
+        }
+
+        if (taskExecutor == null) { // 初始化线程池
+            taskExecutor = new ThreadPoolTaskExecutor();
+            taskExecutor.setCorePoolSize(corePoolSize);
+            taskExecutor.setKeepAliveSeconds(maxPoolSize);
+            taskExecutor.setMaxPoolSize(keepAliveSeconds);
+            taskExecutor.setWaitForTasksToCompleteOnShutdown(true);
+            taskExecutor.initialize();
         }
 
         for (Object service : serviceList) {
@@ -107,9 +125,13 @@ public class RpcProviderBean implements Runnable {
         }
     }
 
+    @PreDestroy
     public void destroy() {
         log.info("RpcProviderBean stop!");
         cancelProvider();
+        if (taskExecutor != null) {
+            taskExecutor.shutdown();
+        }
     }
 
     private void registerProvider() {
@@ -126,12 +148,28 @@ public class RpcProviderBean implements Runnable {
         });
     }
 
+    public void setTaskExecutor(ThreadPoolTaskExecutor taskExecutor) {
+        this.taskExecutor = taskExecutor;
+    }
+
     public void setAddress(String address) {
         this.address = address;
     }
 
     public void setPort(Integer port) {
         this.port = port;
+    }
+
+    public void setCorePoolSize(Integer corePoolSize) {
+        this.corePoolSize = corePoolSize;
+    }
+
+    public void setMaxPoolSize(Integer maxPoolSize) {
+        this.maxPoolSize = maxPoolSize;
+    }
+
+    public void setKeepAliveSeconds(Integer keepAliveSeconds) {
+        this.keepAliveSeconds = keepAliveSeconds;
     }
 
     private class ProviderServerHandler extends ChannelInboundHandlerAdapter {
@@ -158,7 +196,7 @@ public class RpcProviderBean implements Runnable {
         }
 
         private void invoke(RpcRequestDTO rpcRequestDTO) {
-            executorService.execute(() -> {
+            taskExecutor.execute(() -> {
                 Object service = serviceMap.get(rpcRequestDTO.getServiceName());
                 if (service == null) {
                     this.returnError(rpcRequestDTO.getRequestId(), new Exception(rpcRequestDTO.getServiceName() + " can't find provider "));
