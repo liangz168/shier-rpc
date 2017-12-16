@@ -39,6 +39,14 @@ public class RpcNettyClient {
         this.serviceAddress = serviceAddress;
     }
 
+    /**
+     * 发送远程调用请求
+     *
+     * @param rpcRequestDTO
+     * @param timeout
+     * @return
+     * @throws Exception
+     */
     public Object sendRpcRequest(RpcRequestDTO rpcRequestDTO, Long timeout) throws Exception {
         if (!channelFuture.isSuccess()) {
             throw new NullPointerException(serviceAddress + " is cann't connect");
@@ -72,6 +80,12 @@ public class RpcNettyClient {
         doConnect(bootstrap, channelFutureListener);
     }
 
+    /**
+     * 连接服务
+     *
+     * @param bootstrap
+     * @param channelFutureListener
+     */
     private void doConnect(Bootstrap bootstrap, ChannelFutureListener channelFutureListener) {
         //发起异步链接操作
         String[] addressArray = serviceAddress.split(":");
@@ -79,6 +93,9 @@ public class RpcNettyClient {
         channelFuture.addListener(channelFutureListener);
     }
 
+    /**
+     * 断开连接
+     */
     public void disConnect() {
         log.info("RpcNettyClient.disConnect serviceAddress={}", serviceAddress);
         group.shutdownGracefully();
@@ -99,8 +116,6 @@ public class RpcNettyClient {
 
         private Channel channel;
 
-        private ChannelHandlerContext ctx;
-
         private Bootstrap bootstrap;
 
         private ChannelFutureListener channelFutureListener;
@@ -112,7 +127,6 @@ public class RpcNettyClient {
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
-            this.ctx = ctx;
             this.channel = ctx.channel();
         }
 
@@ -129,7 +143,7 @@ public class RpcNettyClient {
             if (rpcCallback != null) {
                 log.debug("收到回调requestId={} result={}", responseDTO.getRequestId(), responseDTO.getResult());
                 callbackMap.remove(responseDTO.getRequestId());
-                rpcCallback.callback(responseDTO.getResult());
+                rpcCallback.callback(responseDTO.getResult()); //收到回调
             }
         }
 
@@ -146,19 +160,14 @@ public class RpcNettyClient {
             try {
                 RpcCallback rpcCallback = new RpcCallback(rpcRequestDTO.getRequestId(), timeout);
                 callbackMap.put(rpcRequestDTO.getRequestId(), rpcCallback);
-                this.channel.writeAndFlush(rpcRequestDTO);
-                return rpcCallback.waitCallback();
+                this.channel.writeAndFlush(rpcRequestDTO); //发送请求
+                return rpcCallback.waitCallback(); //等待回调返回结果
             } catch (Exception e) {
                 callbackMap.remove(rpcRequestDTO.getRequestId());
                 log.error("rpcRequest:{} 调用失败 {}", JSON.toJSONString(rpcRequestDTO), e.getMessage());
                 throw e;
             }
         }
-
-        void close() {
-            this.ctx.close();
-        }
-
     }
 
     private class MyChannelFutureListener implements ChannelFutureListener {
@@ -170,16 +179,15 @@ public class RpcNettyClient {
 
         public void operationComplete(ChannelFuture f) throws Exception {
             ChannelFutureListener _this = this;
-            if (f.isSuccess()) {
-                log.info("netty {} connected!", serviceAddress);
+            if (f.isSuccess()) { //连接成功
+                log.info("RpcNettyClient serviceAddress={} connected!", serviceAddress);
             } else {
-                //  1秒后重新连接
+                //  连接失败 1秒后重新连接
                 f.channel().eventLoop().schedule(() -> {
                     try {
-
                         doConnect(bootstrap, _this);
                     } catch (Exception e) {
-                        e.printStackTrace();
+                        log.error("MyChannelFutureListener.operationComplete", e);
                     }
                 }, 1, TimeUnit.SECONDS);
             }

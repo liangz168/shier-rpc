@@ -19,7 +19,6 @@ import shier.rpc.utils.NameUtils;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
-import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.util.ArrayList;
@@ -50,11 +49,11 @@ public class RpcProviderBean implements Runnable {
 
     private Map<String, Method> serviceMethodMap = new HashMap<>();
 
-    private Integer corePoolSize = 50;
+    private Integer corePoolSize = 200;
 
-    private Integer maxPoolSize = 600;
+    private Integer maxPoolSize = 800;
 
-    private Integer keepAliveSeconds = 600;
+    private Integer keepAliveSeconds = 3000;
 
     private ThreadPoolTaskExecutor taskExecutor;
 
@@ -71,15 +70,18 @@ public class RpcProviderBean implements Runnable {
             address = InetAddress.getLocalHost().getHostAddress();
         }
 
-        if (taskExecutor == null) { // 初始化线程池
+        // 初始化线程池
+        if (taskExecutor == null) {
             taskExecutor = new ThreadPoolTaskExecutor();
+            taskExecutor.setThreadNamePrefix("shier-rpc");
             taskExecutor.setCorePoolSize(corePoolSize);
-            taskExecutor.setKeepAliveSeconds(maxPoolSize);
-            taskExecutor.setMaxPoolSize(keepAliveSeconds);
+            taskExecutor.setKeepAliveSeconds(keepAliveSeconds);
+            taskExecutor.setMaxPoolSize(maxPoolSize);
             taskExecutor.setWaitForTasksToCompleteOnShutdown(true);
             taskExecutor.initialize();
         }
 
+        //服务方法映射
         for (Object service : serviceList) {
             Class<?>[] interfaces = service.getClass().getInterfaces();
             for (Class clazz : interfaces) {
@@ -101,8 +103,9 @@ public class RpcProviderBean implements Runnable {
 
     @Override
     public void run() {
-        EventLoopGroup bossGroup = new NioEventLoopGroup();
-        EventLoopGroup workerGroup = new NioEventLoopGroup();
+        //启动netty服务端
+        bossGroup = new NioEventLoopGroup();
+        workerGroup = new NioEventLoopGroup();
         try {
             ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, workerGroup)
@@ -131,6 +134,9 @@ public class RpcProviderBean implements Runnable {
         }
     }
 
+    /**
+     * 关闭服务
+     */
     @PreDestroy
     public void destroy() {
         log.info("RpcProviderBean stop!");
@@ -148,6 +154,9 @@ public class RpcProviderBean implements Runnable {
         }
     }
 
+    /**
+     * 注册服务提供者
+     */
     private void registerProvider() {
         String addressName = NameUtils.buildAddressName(address, port);
         serviceMap.keySet().forEach(serviceName -> {
@@ -155,6 +164,9 @@ public class RpcProviderBean implements Runnable {
         });
     }
 
+    /**
+     * 注销服务提供者
+     */
     private void cancelProvider() {
         String addressName = NameUtils.buildAddressName(address, port);
         serviceMap.keySet().forEach(serviceName -> {
@@ -191,11 +203,18 @@ public class RpcProviderBean implements Runnable {
         private Channel channel;
 
         @Override
-        public void channelRead(ChannelHandlerContext ctx, Object msg) throws UnsupportedEncodingException {
-            invoke((RpcRequestDTO) msg);
+        public void channelRead(ChannelHandlerContext ctx, Object msg) {
+            RpcRequestDTO rpcRequestDTO = (RpcRequestDTO) msg;
+            try {
+                invoke(rpcRequestDTO);
+            } catch (Exception e) {
+                log.error("ProviderServerHandler.invoke", e);
+                this.returnError(rpcRequestDTO.getRequestId(), e);
+            }
+
         }
 
-        public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
+        public void channelReadComplete(ChannelHandlerContext ctx) {
             ctx.fireChannelReadComplete();
         }
 
@@ -206,20 +225,22 @@ public class RpcProviderBean implements Runnable {
         }
 
         @Override
-        public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        public void channelActive(ChannelHandlerContext ctx) {
             this.channel = ctx.channel();
         }
 
         private void invoke(RpcRequestDTO rpcRequestDTO) {
 
-            if (HEALTH.equals(rpcRequestDTO.getServiceName()) && HEALTH.equals(rpcRequestDTO.getMethodName())) {
-                this.returnResponse(rpcRequestDTO.getRequestId(), OK);
-                return;
-            }
-
             taskExecutor.execute(() -> {
+                //处理服务调用
                 Object service = serviceMap.get(rpcRequestDTO.getServiceName());
                 if (service == null) {
+                    //处理健康检查
+                    if (HEALTH.equals(rpcRequestDTO.getServiceName()) && HEALTH.equals(rpcRequestDTO.getMethodName())) {
+                        this.returnResponse(rpcRequestDTO.getRequestId(), OK);
+                        return;
+                    }
+
                     this.returnError(rpcRequestDTO.getRequestId(), new Exception(rpcRequestDTO.getServiceName() + " can't find provider "));
                     return;
                 }
@@ -240,6 +261,12 @@ public class RpcProviderBean implements Runnable {
             });
         }
 
+        /**
+         * 返回调用结果
+         *
+         * @param requestId
+         * @param object
+         */
         private void returnResponse(String requestId, Object object) {
             RpcResponseDTO rpcResponseDTO = new RpcResponseDTO();
             rpcResponseDTO.setRequestId(requestId);
@@ -247,6 +274,12 @@ public class RpcProviderBean implements Runnable {
             channel.writeAndFlush(rpcResponseDTO);
         }
 
+        /**
+         * 调用出错返回异常
+         *
+         * @param requestId
+         * @param e
+         */
         private void returnError(String requestId, Exception e) {
             RpcResponseDTO rpcResponseDTO = new RpcResponseDTO();
             rpcResponseDTO.setRequestId(requestId);

@@ -32,6 +32,10 @@ public class RpcCallback {
     }
 
     public Object waitCallback() throws Exception {
+        if (this.object != null) {
+            return this.object;
+        }
+
         try {
             lock.lock();
             Boolean timeoutFlg = finish.await(timeout, TimeUnit.MILLISECONDS);

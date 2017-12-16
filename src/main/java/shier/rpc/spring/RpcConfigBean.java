@@ -29,6 +29,8 @@ public class RpcConfigBean {
 
     private static final String ZK_PATH = "/rpcService_";
 
+    private static final String CENTER = "center";
+
     private String zookeeperAddress;
 
     private ZkClient zkClient;
@@ -40,6 +42,12 @@ public class RpcConfigBean {
         log.info("zkClient connected! address={}", zookeeperAddress);
     }
 
+    /**
+     * 注册服务消费者
+     *
+     * @param serviceName
+     * @param rpcConsumerMethodInterceptor
+     */
     public void registerConsumer(String serviceName, RpcConsumerMethodInterceptor rpcConsumerMethodInterceptor) {
         String servicePath = ZK_PATH + serviceName;
         if (!zkClient.exists(servicePath)) {
@@ -59,9 +67,16 @@ public class RpcConfigBean {
                 rpcConsumerMethodInterceptor.getRpcNettyClientList().add(rpcNettyClient);
             }
         }
+        //监听消费的服务变化
         zkClient.subscribeDataChanges(servicePath, new RpcZkListener(rpcConsumerMethodInterceptor, serviceName, addressList));
     }
 
+    /**
+     * 注册服务提供者
+     *
+     * @param serviceName
+     * @param address
+     */
     public void registerProvider(String serviceName, String address) {
         String servicePath = ZK_PATH + serviceName;
         if (zkClient.exists(servicePath)) {
@@ -73,17 +88,57 @@ public class RpcConfigBean {
         } else {
             List<String> addressList = new ArrayList<>();
             addressList.add(address);
-            zkClient.create(servicePath, addressList, CreateMode.PERSISTENT);
+            zkClient.create(servicePath, addressList, CreateMode.PERSISTENT);//创建节点
         }
         log.info("registerProvider serviceName={} address={}", serviceName, address);
     }
 
+    /**
+     * 注销服务提供者
+     *
+     * @param serviceName
+     * @param address
+     */
     public void cancelProvider(String serviceName, String address) {
         String servicePath = ZK_PATH + serviceName;
         List<String> addressList = zkClient.readData(servicePath, new Stat());
         addressList.remove(address);
         zkClient.writeData(servicePath, addressList);
         log.info("cancelProvider serviceName={} address={}", serviceName, address);
+    }
+
+    /**
+     * 注册服务监控中心
+     *
+     * @param address
+     */
+    public void registerCenter(String address) {
+        String centerPath = ZK_PATH + CENTER;
+        if (zkClient.exists(centerPath)) {
+            zkClient.writeData(centerPath, address);
+        } else {
+            zkClient.create(centerPath, address, CreateMode.PERSISTENT);//创建节点
+        }
+    }
+
+
+    /**
+     * 注销服务监控中心
+     */
+    public void cancelCenter() {
+        String centerPath = ZK_PATH + CENTER;
+        if (zkClient.exists(centerPath)) {
+            zkClient.writeData(centerPath, null);
+        }
+    }
+
+    public String getCenterAddress() {
+        String centerPath = ZK_PATH + CENTER;
+        if (zkClient.exists(centerPath)) {
+            return zkClient.readData(centerPath, new Stat());
+        } else {
+            return null;
+        }
     }
 
     public void setZookeeperAddress(String zookeeperAddress) {
@@ -120,7 +175,7 @@ public class RpcConfigBean {
 
                 for (int i = addressList.size() - 1; i >= 0; i--) {
                     String address = addressList.get(i);
-                    if (!newAddressList.contains(address)) { //有节点下线
+                    if (!newAddressList.contains(address)) { //有服务提供者下线
                         addressList.remove(i);
                         RpcNettyClient oldClient = rpcNettyClientMap.get(address);
                         rpcNettyClientMap.remove(address);
