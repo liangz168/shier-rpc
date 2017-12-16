@@ -9,6 +9,7 @@ import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.data.Stat;
 import shier.rpc.netty.RpcNettyClient;
 
+import javax.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -37,6 +38,7 @@ public class RpcConfigBean {
     private Map<String, RpcNettyClient> rpcNettyClientMap = new HashMap<>();
 
 
+    @PostConstruct
     public void init() {
         zkClient = new ZkClient(zookeeperAddress, 10000, 10000, new SerializableSerializer());
         log.info("zkClient connected! address={}", zookeeperAddress);

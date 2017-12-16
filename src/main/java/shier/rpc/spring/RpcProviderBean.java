@@ -7,12 +7,13 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
-import io.netty.util.internal.StringUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import shier.rpc.dto.RpcRequestDTO;
 import shier.rpc.dto.RpcResponseDTO;
+import shier.rpc.exception.MethodRepeatException;
+import shier.rpc.exception.ProviderNotFindException;
 import shier.rpc.netty.HessianObjectDecoder;
 import shier.rpc.netty.HessianObjectEncoder;
 import shier.rpc.utils.NameUtils;
@@ -66,7 +67,7 @@ public class RpcProviderBean implements Runnable {
 
     @PostConstruct
     public void init() throws Exception {
-        if (StringUtil.isNullOrEmpty(address)) {
+        if (address == null || "".equals(address.trim())) {
             address = InetAddress.getLocalHost().getHostAddress();
         }
 
@@ -91,7 +92,7 @@ public class RpcProviderBean implements Runnable {
                     String methodName = NameUtils.buildMethodName(method);
                     String serviceMethodName = NameUtils.buildServiceMethodName(serviceName, methodName);
                     if (serviceMethodMap.containsKey(serviceMethodName)) {
-                        throw new Exception(serviceName + " have repeat method " + methodName);
+                        throw new MethodRepeatException(serviceName + " have repeat method " + methodName);
                     }
                     serviceMethodMap.put(serviceMethodName, method);
                 }
@@ -241,13 +242,13 @@ public class RpcProviderBean implements Runnable {
                         return;
                     }
 
-                    this.returnError(rpcRequestDTO.getRequestId(), new Exception(rpcRequestDTO.getServiceName() + " can't find provider "));
+                    this.returnError(rpcRequestDTO.getRequestId(), new ProviderNotFindException(rpcRequestDTO.getServiceName() + " can't find provider "));
                     return;
                 }
 
                 Method method = serviceMethodMap.get(NameUtils.buildServiceMethodName(rpcRequestDTO.getServiceName(), rpcRequestDTO.getMethodName()));
                 if (method == null) {
-                    this.returnError(rpcRequestDTO.getRequestId(), new Exception(rpcRequestDTO.getServiceName() + " can't find method " + rpcRequestDTO.getMethodName()));
+                    this.returnError(rpcRequestDTO.getRequestId(), new ProviderNotFindException(rpcRequestDTO.getServiceName() + " can't find method " + rpcRequestDTO.getMethodName()));
                     return;
                 }
 

@@ -12,9 +12,9 @@ import lombok.extern.slf4j.Slf4j;
 import shier.rpc.dto.RpcCallback;
 import shier.rpc.dto.RpcRequestDTO;
 import shier.rpc.dto.RpcResponseDTO;
+import shier.rpc.exception.RpcConnectException;
 import shier.rpc.spring.RpcConfigBean;
 
-import java.net.ConnectException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -49,7 +49,7 @@ public class RpcNettyClient {
      */
     public Object sendRpcRequest(RpcRequestDTO rpcRequestDTO, Long timeout) throws Exception {
         if (!channelFuture.isSuccess()) {
-            throw new NullPointerException(serviceAddress + " is cann't connect");
+            throw new RpcConnectException(serviceAddress + " is cann't connect");
         }
         if (rpcClientHandler == null) {
             throw new NullPointerException(serviceAddress + " is cann't connect");
@@ -155,7 +155,7 @@ public class RpcNettyClient {
 
         private Object sendRpcRequest(RpcRequestDTO rpcRequestDTO, Long timeout) throws Exception {
             if (!this.channel.isActive()) {
-                throw new ConnectException(serviceAddress + " is unable to connect");
+                throw new RpcConnectException(serviceAddress + " is unable to connect");
             }
             try {
                 RpcCallback rpcCallback = new RpcCallback(rpcRequestDTO.getRequestId(), timeout);

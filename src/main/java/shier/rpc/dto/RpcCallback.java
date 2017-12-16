@@ -2,6 +2,7 @@ package shier.rpc.dto;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import shier.rpc.exception.RpcTimeoutException;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
@@ -32,15 +33,16 @@ public class RpcCallback {
     }
 
     public Object waitCallback() throws Exception {
+
         if (this.object != null) {
             return this.object;
         }
 
         try {
             lock.lock();
-            Boolean timeoutFlg = finish.await(timeout, TimeUnit.MILLISECONDS);
-            if (!timeoutFlg) {
-                throw new Exception("await timeout " + timeout);
+            Boolean signalFlg = finish.await(timeout, TimeUnit.MILLISECONDS);
+            if (!signalFlg) {
+                throw new RpcTimeoutException("await timeout " + timeout);
             }
             return this.object;
         } finally {
@@ -52,7 +54,7 @@ public class RpcCallback {
         try {
             lock.lock();
             this.object = object;
-            finish.signal();
+            finish.signalAll();
         } finally {
             lock.unlock();
         }
