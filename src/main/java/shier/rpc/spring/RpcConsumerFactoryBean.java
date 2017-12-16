@@ -5,6 +5,8 @@ import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import shier.rpc.utils.NameUtils;
 
+import javax.annotation.PostConstruct;
+
 /**
  * @author liangliang.wei
  * @description
@@ -25,6 +27,7 @@ public class RpcConsumerFactoryBean implements FactoryBean {
     @Autowired
     private RpcConfigBean rpcConfigBean;
 
+    @PostConstruct
     public void init() throws ClassNotFoundException {
         if (interfaceName == null) {
             throw new NullPointerException("interfaceName can't be null");

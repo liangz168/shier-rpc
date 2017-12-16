@@ -37,7 +37,7 @@ public class RpcConsumerMethodInterceptor implements MethodInterceptor {
     @Override
     public Object intercept(Object obj, Method method, Object[] args, MethodProxy proxy) throws Throwable {
         if (rpcNettyClientList.isEmpty()) {
-            throw new ProviderNotFindException(serviceName + " have not a provider !");
+            throw new ProviderNotFindException(serviceName + " have no provider !");
         }
         List<RpcNettyClient> list = rpcNettyClientList;
 
