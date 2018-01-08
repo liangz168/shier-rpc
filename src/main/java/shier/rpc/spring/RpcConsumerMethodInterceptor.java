@@ -4,6 +4,7 @@ import net.sf.cglib.proxy.MethodInterceptor;
 import net.sf.cglib.proxy.MethodProxy;
 import shier.rpc.dto.RpcRequestDTO;
 import shier.rpc.exception.ProviderNotFindException;
+import shier.rpc.monitor.Monitor;
 import shier.rpc.netty.RpcNettyClient;
 import shier.rpc.utils.NameUtils;
 
@@ -36,10 +37,6 @@ public class RpcConsumerMethodInterceptor implements MethodInterceptor {
 
     @Override
     public Object intercept(Object obj, Method method, Object[] args, MethodProxy proxy) throws Throwable {
-        if (rpcNettyClientList.isEmpty()) {
-            throw new ProviderNotFindException(serviceName + " have no provider !");
-        }
-        List<RpcNettyClient> list = rpcNettyClientList;
 
         RpcRequestDTO rpcRequestDTO = new RpcRequestDTO();
         rpcRequestDTO.setRequestId(UUID.randomUUID().toString().substring(0, 16));
@@ -47,10 +44,23 @@ public class RpcConsumerMethodInterceptor implements MethodInterceptor {
         rpcRequestDTO.setMethodName(NameUtils.buildMethodName(method));
         rpcRequestDTO.setParams(args);
 
+        Monitor monitor = Monitor.newStart(rpcRequestDTO.getServiceName(), rpcRequestDTO.getMethodName());//开启监控
+        try {
+            if (rpcNettyClientList.isEmpty()) {
+                throw new ProviderNotFindException(serviceName + " have no provider !");
+            }
+            List<RpcNettyClient> list = rpcNettyClientList;
+            int size = list.size();
+            int index = (int) (Math.random() * size); // 随机负载
+            Object result = list.get(index).sendRpcRequest(rpcRequestDTO, timeout);
+            monitor.end(); //标记调用成功
+            return result;
+        } finally {
+            if (rpcConfigBean.getOpenReport()) {
+                monitor.commit(); //提交监控
+            }
+        }
 
-        int size = list.size();
-        int index = (int) (Math.random() * size); // 随机负载
-        return list.get(index).sendRpcRequest(rpcRequestDTO, timeout);
     }
 
     public String getServiceName() {

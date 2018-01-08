@@ -7,13 +7,19 @@ import org.I0Itec.zkclient.ZkClient;
 import org.I0Itec.zkclient.serialize.SerializableSerializer;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.data.Stat;
+import shier.rpc.monitor.Monitor;
+import shier.rpc.monitor.Report;
 import shier.rpc.netty.RpcNettyClient;
 
 import javax.annotation.PostConstruct;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -34,14 +40,27 @@ public class RpcConfigBean {
 
     private String zookeeperAddress;
 
+    private Boolean openReport = Boolean.FALSE;
+
+    private Integer reportRate = 30;
+
+    private String centerAddress;
+
     private ZkClient zkClient;
     private Map<String, RpcNettyClient> rpcNettyClientMap = new HashMap<>();
 
+    private ScheduledExecutorService singleThreadScheduledExecutor = Executors.newSingleThreadScheduledExecutor();
 
     @PostConstruct
     public void init() {
         zkClient = new ZkClient(zookeeperAddress, 10000, 10000, new SerializableSerializer());
         log.info("zkClient connected! address={}", zookeeperAddress);
+
+        if (openReport) {
+            ReportHandler reportHandler = new ReportHandler();
+            singleThreadScheduledExecutor.scheduleAtFixedRate(reportHandler, reportRate, reportRate, TimeUnit.SECONDS);
+        }
+
     }
 
     /**
@@ -135,9 +154,28 @@ public class RpcConfigBean {
     }
 
     public String getCenterAddress() {
+        if (centerAddress != null && !"".equals(centerAddress)) {
+            return centerAddress;
+        }
+
         String centerPath = ZK_PATH + CENTER;
         if (zkClient.exists(centerPath)) {
-            return zkClient.readData(centerPath, new Stat());
+            centerAddress = zkClient.readData(centerPath, new Stat());
+            log.info("centerAddress:{}", centerAddress);
+            //监听节点变化
+            zkClient.subscribeDataChanges(centerPath, new IZkDataListener() {
+                @Override
+                public void handleDataChange(String s, Object o) throws Exception {
+                    centerAddress = (String) o;
+                    log.info("centerAddress change:{}", centerAddress);
+                }
+
+                @Override
+                public void handleDataDeleted(String s) throws Exception {
+                    centerAddress = null;
+                }
+            });
+            return centerAddress;
         } else {
             return null;
         }
@@ -145,6 +183,14 @@ public class RpcConfigBean {
 
     public void setZookeeperAddress(String zookeeperAddress) {
         this.zookeeperAddress = zookeeperAddress;
+    }
+
+    public void setOpenReport(Boolean openReport) {
+        this.openReport = openReport;
+    }
+
+    public Boolean getOpenReport() {
+        return openReport;
     }
 
     private class RpcZkListener implements IZkDataListener {
@@ -164,7 +210,7 @@ public class RpcConfigBean {
         @Override
         public void handleDataChange(String s, Object o) throws Exception {
 
-            synchronized (this) {
+            synchronized (RpcConfigBean.class) {
                 List<String> newAddressList = (List<String>) o;
                 log.info("RpcZkListener path:{} change:{}", s, JSON.toJSONString(newAddressList));
                 if (newAddressList == null) {
@@ -212,6 +258,74 @@ public class RpcConfigBean {
         public void handleDataDeleted(String s) throws Exception {
 
         }
+    }
+
+    private class ReportHandler implements Runnable {
+
+
+        @Override
+        public void run() {
+
+            try {
+                Map<String, Report> reportMap = Monitor.reportMap;
+                Monitor.reportMap = new HashMap<>();
+
+                String centerAddress = getCenterAddress();
+                if (centerAddress == null || "".equals(centerAddress) || reportMap.size() == 0) {
+                    return;
+                }
+
+                Date now = new Date();
+                for (Map.Entry<String, Report> entry : reportMap.entrySet()) {
+                    entry.getValue().setEndTime(now);
+                }
+
+                this.postJson(centerAddress + "/report", JSON.toJSONString(reportMap));
+            } catch (Exception e) {
+                log.error("ReportHandler", e);
+            }
+
+        }
+
+        private void postJson(String url, String json) {
+
+            HttpURLConnection conn = null;
+            OutputStream outputStream = null;
+            try {
+                URL realUrl = new URL(url);
+                // 打开和URL之间的连接
+                conn = (HttpURLConnection) realUrl.openConnection();
+                conn.setReadTimeout(3000);
+                conn.setConnectTimeout(1000);
+                conn.setRequestMethod("POST");
+                conn.setDoOutput(true);
+                conn.setDoInput(true);
+                conn.setUseCaches(false);
+                conn.setRequestProperty("Content-type", "application/json;chartset=utf-8");
+                conn.connect();
+
+                outputStream = conn.getOutputStream();
+                outputStream.write(json.getBytes());
+                outputStream.flush();
+                int code = conn.getResponseCode();
+
+            } catch (Exception e) {
+                log.error("ReportHandler", e);
+            } finally {
+                if (conn != null) {
+                    conn.disconnect();
+                }
+
+                if (outputStream != null) {
+                    try {
+                        outputStream.close();
+                    } catch (IOException e) {
+                    }
+                }
+            }
+
+        }
+
     }
 
 }

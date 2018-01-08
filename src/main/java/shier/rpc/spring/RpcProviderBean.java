@@ -40,6 +40,8 @@ public class RpcProviderBean implements Runnable {
 
     private String version = "0.0.1";
 
+    private String applicationName;
+
     private String address;
 
     private Integer port = 8090;
@@ -55,6 +57,8 @@ public class RpcProviderBean implements Runnable {
     private Integer maxPoolSize = 800;
 
     private Integer keepAliveSeconds = 3000;
+
+    private Integer queueCapacity = 50;
 
     private ThreadPoolTaskExecutor taskExecutor;
 
@@ -78,6 +82,7 @@ public class RpcProviderBean implements Runnable {
             taskExecutor.setCorePoolSize(corePoolSize);
             taskExecutor.setKeepAliveSeconds(keepAliveSeconds);
             taskExecutor.setMaxPoolSize(maxPoolSize);
+            taskExecutor.setQueueCapacity(queueCapacity);
             taskExecutor.setWaitForTasksToCompleteOnShutdown(true);
             taskExecutor.initialize();
         }
@@ -197,6 +202,14 @@ public class RpcProviderBean implements Runnable {
 
     public void setKeepAliveSeconds(Integer keepAliveSeconds) {
         this.keepAliveSeconds = keepAliveSeconds;
+    }
+
+    public void setApplicationName(String applicationName) {
+        this.applicationName = applicationName;
+    }
+
+    public void setQueueCapacity(Integer queueCapacity) {
+        this.queueCapacity = queueCapacity;
     }
 
     private class ProviderServerHandler extends ChannelInboundHandlerAdapter {
